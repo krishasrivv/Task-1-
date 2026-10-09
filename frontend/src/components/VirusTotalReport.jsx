@@ -1,6 +1,8 @@
-import { Shield, ExternalLink, AlertTriangle, CheckCircle, HelpCircle } from 'lucide-react'
+import { useState } from 'react'
+import { Shield, Copy, Check, ExternalLink, AlertTriangle } from 'lucide-react'
 
 export default function VirusTotalReport({ data }) {
+  const [copied, setCopied] = useState(false)
   if (!data) return null
 
   const badge = data.found
@@ -20,6 +22,16 @@ export default function VirusTotalReport({ data }) {
 
   const dangerClass = malicious > 5 ? 'danger' : malicious > 0 ? 'warn' : 'safe'
 
+  const copyToClipboard = (text) => {
+    if (!text) return
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Calculate percentage of malicious / suspicious
+  const malPct = total > 0 ? Math.min(100, Math.round(((malicious + suspicious) / total) * 100)) : 0
+
   return (
     <div className="report-panel">
       <div className="report-panel-header">
@@ -38,9 +50,35 @@ export default function VirusTotalReport({ data }) {
 
       {data.found && (
         <>
+          {/* Threat Meter */}
+          {total > 0 && (
+            <div style={{ marginBottom: '16px', background: 'var(--bg-input)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: 'var(--glass-border)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.78rem', marginBottom: '6px' }}>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>Detection Risk Score</span>
+                <span style={{ fontWeight: 700, color: malPct > 15 ? 'var(--red)' : malPct > 0 ? 'var(--orange)' : 'var(--green)' }}>
+                  {malPct}% Risk ({malicious} flagged / {total} engines)
+                </span>
+              </div>
+              <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '999px', overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${(malicious / total) * 100}%`, background: 'var(--red)', transition: 'width .5s' }} />
+                <div style={{ width: `${(suspicious / total) * 100}%`, background: 'var(--orange)', transition: 'width .5s' }} />
+                <div style={{ width: `${(harmless / total) * 100}%`, background: 'var(--green)', transition: 'width .5s' }} />
+              </div>
+            </div>
+          )}
+
           <div className="report-field">
             <span className="field-label">Target Indicator</span>
-            <span className="field-value">{data.indicator}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="field-value">{data.indicator}</span>
+              <button
+                onClick={() => copyToClipboard(data.indicator)}
+                title="Copy indicator"
+                style={{ background: 'none', border: 'none', color: copied ? 'var(--green)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            </div>
           </div>
           <div className="report-field">
             <span className="field-label">Category</span>
@@ -132,7 +170,7 @@ export default function VirusTotalReport({ data }) {
 
           {/* Tags */}
           {data.tags && data.tags.length > 0 && (
-            <div className="report-field" style={{ flexDirection: 'column', gap: '6px' }}>
+            <div className="report-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
               <span className="field-label">Security Tags</span>
               <div className="pulse-tags">
                 {data.tags.map((t, i) => (

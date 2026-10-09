@@ -100,9 +100,37 @@ export default function Chatbot({ lookupResult }) {
     <div className="chatbot-section">
       <div className="chatbot-panel">
         <div className="chatbot-header">
-          <Bot size={20} style={{ color: 'var(--accent)' }} />
-          <h3>ThreatIntel AI Assistant</h3>
-          <span className="ai-badge">NVIDIA AI</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+            <Bot size={20} style={{ color: 'var(--accent)' }} />
+            <h3>ThreatIntel AI Assistant</h3>
+            <span className="ai-badge">NVIDIA AI</span>
+          </div>
+          <button
+            onClick={() => setMessages([
+              {
+                role: 'system',
+                content: lookupResult
+                  ? `Loaded report for \`${lookupResult.indicator}\` (${lookupResult.type?.toUpperCase() || 'Indicator'}). Ask me anything to analyze this indicator.`
+                  : 'Search for an indicator (IP, domain, hash, or URL) first, then I can help you analyze the findings.',
+              }
+            ])}
+            title="Reset conversation"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-muted)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '.75rem',
+              padding: '4px 8px',
+              borderRadius: 'var(--radius-sm)',
+              transition: 'all .2s'
+            }}
+          >
+            <RefreshCw size={13} /> Reset
+          </button>
         </div>
 
         <div className="chatbot-messages">

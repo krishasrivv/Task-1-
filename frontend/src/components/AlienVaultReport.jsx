@@ -1,6 +1,8 @@
-import { Radar, ShieldAlert, Globe, Network, Award, Info } from 'lucide-react'
+import { useState } from 'react'
+import { Radar, ShieldAlert, Globe, Network, Award, Info, Copy, Check, Calendar } from 'lucide-react'
 
 export default function AlienVaultReport({ data }) {
+  const [copied, setCopied] = useState(false)
   if (!data) return null
 
   const badge = data.found
@@ -10,6 +12,13 @@ export default function AlienVaultReport({ data }) {
     : 'badge-not-found'
 
   const badgeText = data.found ? 'Report Available' : data.error ? 'Scan Error' : 'No Threat Records'
+
+  const copyToClipboard = (text) => {
+    if (!text) return
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
 
   return (
     <div className="report-panel">
@@ -31,7 +40,16 @@ export default function AlienVaultReport({ data }) {
         <>
           <div className="report-field">
             <span className="field-label">Target Indicator</span>
-            <span className="field-value">{data.indicator}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="field-value">{data.indicator}</span>
+              <button
+                onClick={() => copyToClipboard(data.indicator)}
+                title="Copy indicator"
+                style={{ background: 'none', border: 'none', color: copied ? 'var(--green)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+              </button>
+            </div>
           </div>
           <div className="report-field">
             <span className="field-label">Category</span>
@@ -69,7 +87,7 @@ export default function AlienVaultReport({ data }) {
 
           {/* Validation tags if present */}
           {data.validation && data.validation.length > 0 && (
-            <div className="report-field" style={{ flexDirection: 'column', gap: '6px' }}>
+            <div className="report-field" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
               <span className="field-label">Community Validations</span>
               <div className="pulse-tags">
                 {data.validation.map((v, i) => (
@@ -83,8 +101,8 @@ export default function AlienVaultReport({ data }) {
 
           {/* Pulses */}
           {data.pulses && data.pulses.length > 0 ? (
-            <div style={{ marginTop: '14px' }}>
-              <p style={{ fontSize: '.82rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
+            <div style={{ marginTop: '16px' }}>
+              <p style={{ fontSize: '.84rem', fontWeight: 600, color: 'var(--text-heading)', marginBottom: '10px' }}>
                 Active Threat Alerts ({data.pulses.length})
               </p>
               <ul className="pulse-list">
@@ -93,7 +111,7 @@ export default function AlienVaultReport({ data }) {
                     <h4>{p.name || 'Security Alert'}</h4>
                     {p.description && <p>{p.description}</p>}
                     {p.adversary && (
-                      <p style={{ color: 'var(--red)', fontSize: '.75rem', marginTop: '4px' }}>
+                      <p style={{ color: 'var(--red)', fontSize: '.75rem', marginTop: '6px', fontWeight: 500 }}>
                         Known Threat Actor: {p.adversary}
                       </p>
                     )}
@@ -105,9 +123,9 @@ export default function AlienVaultReport({ data }) {
                       </div>
                     )}
                     {p.attack_ids && p.attack_ids.length > 0 && (
-                      <div className="pulse-tags" style={{ marginTop: '4px' }}>
+                      <div className="pulse-tags" style={{ marginTop: '6px' }}>
                         {p.attack_ids.map((a, k) => (
-                          <span key={k} className="pulse-tag" style={{ background: 'rgba(239,68,68,.12)', color: 'var(--red)' }}>
+                          <span key={k} className="pulse-tag" style={{ background: 'rgba(244,63,94,.12)', borderColor: 'rgba(244,63,94,.25)', color: 'var(--red)' }}>
                             Attack Technique: {a}
                           </span>
                         ))}
@@ -118,7 +136,7 @@ export default function AlienVaultReport({ data }) {
               </ul>
             </div>
           ) : (
-            <div style={{ marginTop: '12px', padding: '10px 14px', background: 'var(--bg-input)', borderRadius: '6px', fontSize: '.8rem', color: 'var(--text-muted)' }}>
+            <div style={{ marginTop: '14px', padding: '12px 16px', background: 'var(--bg-input)', border: 'var(--glass-border)', borderRadius: 'var(--radius-md)', fontSize: '.82rem', color: 'var(--text-muted)' }}>
               No active threat pulses reported for this indicator in AlienVault OTX.
             </div>
           )}
