@@ -77,7 +77,6 @@ function App() {
       <div className="main-content">
         <Header
           onMenuToggle={() => setSidebarOpen(o => !o)}
-          onRefreshHealth={fetchHealth}
         />
 
         <div className="page-body">
