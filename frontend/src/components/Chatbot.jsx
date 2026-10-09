@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { Send, Bot, User, AlertCircle, Sparkles, RefreshCw } from 'lucide-react'
+import { Send, Bot, User, AlertCircle, Sparkles, RefreshCw, Download, Copy, Check, FileText } from 'lucide-react'
 
 const SUGGESTIONS = [
   'Summarize threat level',
@@ -20,6 +20,7 @@ export default function Chatbot({ lookupResult }) {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [copiedIndex, setCopiedIndex] = useState(null)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -96,6 +97,58 @@ export default function Chatbot({ lookupResult }) {
     }
   }
 
+  const copyMessage = (content, index) => {
+    navigator.clipboard.writeText(content)
+    setCopiedIndex(index)
+    setTimeout(() => setCopiedIndex(null), 2000)
+  }
+
+  const downloadSingleMessage = (content, index) => {
+    const indicator = lookupResult?.indicator || 'indicator'
+    const cleanIndicator = indicator.replace(/[^a-zA-Z0-9.-]/g, '_')
+    const filename = `threatintel-ai-analysis-${cleanIndicator}-${Date.now()}.md`
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  const downloadFullReport = () => {
+    const indicator = lookupResult?.indicator || 'general-analysis'
+    const cleanIndicator = indicator.replace(/[^a-zA-Z0-9.-]/g, '_')
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+
+    let mdContent = `# ThreatIntel AI — Threat Intelligence Analysis Report\n`
+    mdContent += `**Generated:** ${now.toLocaleString()}\n`
+    if (lookupResult) {
+      mdContent += `**Target Indicator:** \`${lookupResult.indicator}\`\n`
+      mdContent += `**Indicator Type:** ${lookupResult.type?.toUpperCase() || 'N/A'}\n`
+    }
+    mdContent += `\n---\n\n## Analysis Transcript\n\n`
+
+    messages.forEach((m) => {
+      if (m.role === 'user') {
+        mdContent += `### 👤 User Query\n${m.content}\n\n`
+      } else if (m.role === 'assistant') {
+        mdContent += `### 🤖 ThreatIntel AI Analysis\n${m.content}\n\n---\n\n`
+      } else if (m.role === 'system') {
+        mdContent += `> *System Context:* ${m.content}\n\n`
+      }
+    })
+
+    const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `threatintel-report-${cleanIndicator}-${dateStr}.md`
+    link.click()
+    URL.revokeObjectURL(link.href)
+  }
+
+  const hasAssistantMessages = messages.some(m => m.role === 'assistant')
+
   return (
     <div className="chatbot-section">
       <div className="chatbot-panel">
@@ -105,32 +158,58 @@ export default function Chatbot({ lookupResult }) {
             <h3>ThreatIntel AI Assistant</h3>
             <span className="ai-badge">NVIDIA AI</span>
           </div>
-          <button
-            onClick={() => setMessages([
-              {
-                role: 'system',
-                content: lookupResult
-                  ? `Loaded report for \`${lookupResult.indicator}\` (${lookupResult.type?.toUpperCase() || 'Indicator'}). Ask me anything to analyze this indicator.`
-                  : 'Search for an indicator (IP, domain, hash, or URL) first, then I can help you analyze the findings.',
-              }
-            ])}
-            title="Reset conversation"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text-muted)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '.75rem',
-              padding: '4px 8px',
-              borderRadius: 'var(--radius-sm)',
-              transition: 'all .2s'
-            }}
-          >
-            <RefreshCw size={13} /> Reset
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {hasAssistantMessages && (
+              <button
+                onClick={downloadFullReport}
+                title="Download full analysis report as Markdown"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.12)',
+                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                  color: 'var(--accent-hover)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  fontSize: '.75rem',
+                  fontWeight: 600,
+                  padding: '5px 10px',
+                  borderRadius: 'var(--radius-sm)',
+                  transition: 'all .2s',
+                }}
+              >
+                <Download size={13} /> Export Report
+              </button>
+            )}
+
+            <button
+              onClick={() => setMessages([
+                {
+                  role: 'system',
+                  content: lookupResult
+                    ? `Loaded report for \`${lookupResult.indicator}\` (${lookupResult.type?.toUpperCase() || 'Indicator'}). Ask me anything to analyze this indicator.`
+                    : 'Search for an indicator (IP, domain, hash, or URL) first, then I can help you analyze the findings.',
+                }
+              ])}
+              title="Reset conversation"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '.75rem',
+                padding: '5px 8px',
+                borderRadius: 'var(--radius-sm)',
+                transition: 'all .2s',
+              }}
+            >
+              <RefreshCw size={13} /> Reset
+            </button>
+          </div>
         </div>
 
         <div className="chatbot-messages">
@@ -142,8 +221,47 @@ export default function Chatbot({ lookupResult }) {
                 </div>
               )}
               {msg.role === 'assistant' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '.72rem', color: '#60a5fa' }}>
-                  <Bot size={12} /> ThreatIntel AI
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', fontSize: '.72rem', color: '#60a5fa' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Bot size={12} /> ThreatIntel AI
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      onClick={() => copyMessage(msg.content, i)}
+                      title="Copy response"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: copiedIndex === i ? 'var(--green)' : 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontSize: '.68rem',
+                        padding: '1px 4px',
+                      }}
+                    >
+                      {copiedIndex === i ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedIndex === i ? 'Copied' : 'Copy'}
+                    </button>
+                    <button
+                      onClick={() => downloadSingleMessage(msg.content, i)}
+                      title="Download this response as Markdown"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                        fontSize: '.68rem',
+                        padding: '1px 4px',
+                      }}
+                    >
+                      <Download size={12} /> Download
+                    </button>
+                  </div>
                 </div>
               )}
               {msg.role === 'error' && (
