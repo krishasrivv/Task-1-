@@ -8,7 +8,7 @@ export default function StatsCards({ vtData, otxData }) {
   const undetected = stats.undetected || 0
   const totalEngines = malicious + suspicious + harmless + undetected + (stats.timeout || 0)
   const pulseCount = otxData?.pulse_count || 0
-  const vtFound = vtData?.found ? 'Yes' : 'No'
+  const vtFound = vtData?.found ? 'Available' : 'None'
 
   return (
     <div className="stats-grid">
@@ -19,7 +19,7 @@ export default function StatsCards({ vtData, otxData }) {
         <div className="stat-card-content">
           <h3>Malicious</h3>
           <div className="stat-value">{malicious}</div>
-          <div className="stat-sub">engine detections</div>
+          <div className="stat-sub">confirmed threat flags</div>
         </div>
       </div>
 
@@ -30,7 +30,7 @@ export default function StatsCards({ vtData, otxData }) {
         <div className="stat-card-content">
           <h3>Suspicious</h3>
           <div className="stat-value">{suspicious}</div>
-          <div className="stat-sub">engine flags</div>
+          <div className="stat-sub">risky behavior flags</div>
         </div>
       </div>
 
@@ -41,7 +41,7 @@ export default function StatsCards({ vtData, otxData }) {
         <div className="stat-card-content">
           <h3>Harmless</h3>
           <div className="stat-value">{harmless}</div>
-          <div className="stat-sub">engines clean</div>
+          <div className="stat-sub">clean / benign scans</div>
         </div>
       </div>
 
@@ -50,9 +50,9 @@ export default function StatsCards({ vtData, otxData }) {
           <Activity size={24} />
         </div>
         <div className="stat-card-content">
-          <h3>Total Engines</h3>
+          <h3>Scanners Checked</h3>
           <div className="stat-value">{totalEngines}</div>
-          <div className="stat-sub">scan engines</div>
+          <div className="stat-sub">total security engines</div>
         </div>
       </div>
 
@@ -61,9 +61,9 @@ export default function StatsCards({ vtData, otxData }) {
           <Radar size={24} />
         </div>
         <div className="stat-card-content">
-          <h3>OTX Pulses</h3>
+          <h3>Community Alerts</h3>
           <div className="stat-value">{pulseCount}</div>
-          <div className="stat-sub">threat pulses</div>
+          <div className="stat-sub">OTX threat pulses</div>
         </div>
       </div>
 
@@ -72,9 +72,9 @@ export default function StatsCards({ vtData, otxData }) {
           <Search size={24} />
         </div>
         <div className="stat-card-content">
-          <h3>VT Report</h3>
+          <h3>Scanner Record</h3>
           <div className="stat-value">{vtFound}</div>
-          <div className="stat-sub">report found</div>
+          <div className="stat-sub">VirusTotal database</div>
         </div>
       </div>
     </div>

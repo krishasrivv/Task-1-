@@ -34,11 +34,11 @@ export default function DetectionCharts({ vtData, otxData }) {
   if (!stats || !vtData?.found) return null
 
   const pieData = [
-    { name: 'Malicious',  value: stats.malicious  || 0, fill: COLORS.malicious },
-    { name: 'Suspicious', value: stats.suspicious || 0, fill: COLORS.suspicious },
-    { name: 'Harmless',   value: stats.harmless   || 0, fill: COLORS.harmless },
-    { name: 'Undetected', value: stats.undetected || 0, fill: COLORS.undetected },
-    { name: 'Timeout',    value: stats.timeout    || 0, fill: COLORS.timeout },
+    { name: 'Malicious (Threats)',  value: stats.malicious  || 0, fill: COLORS.malicious },
+    { name: 'Suspicious (Risky)',   value: stats.suspicious || 0, fill: COLORS.suspicious },
+    { name: 'Harmless (Clean)',     value: stats.harmless   || 0, fill: COLORS.harmless },
+    { name: 'Undetected (No Flags)', value: stats.undetected || 0, fill: COLORS.undetected },
+    { name: 'Timeout',              value: stats.timeout    || 0, fill: COLORS.timeout },
   ].filter(d => d.value > 0)
 
   const barData = [
@@ -54,7 +54,7 @@ export default function DetectionCharts({ vtData, otxData }) {
       <div className="chart-panel">
         <h3>
           <PieIcon size={18} style={{ color: 'var(--accent)' }} />
-          Detection Distribution
+          Detection Breakdown
         </h3>
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
@@ -87,7 +87,7 @@ export default function DetectionCharts({ vtData, otxData }) {
       <div className="chart-panel">
         <h3>
           <BarChart3 size={18} style={{ color: 'var(--cyan)' }} />
-          Engine Verdicts
+          Security Engine Verdicts
         </h3>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={barData} barSize={36}>

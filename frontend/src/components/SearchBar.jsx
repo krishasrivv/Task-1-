@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { Search } from 'lucide-react'
 
 const EXAMPLES = [
-  { label: 'IP', value: '8.8.8.8' },
+  { label: 'Public IP', value: '8.8.8.8' },
   { label: 'Domain', value: 'google.com' },
-  { label: 'Hash', value: '44d88612fea8a8f36de82e1278abb02f' },
-  { label: 'URL', value: 'https://example.com' },
+  { label: 'Malware Hash', value: '44d88612fea8a8f36de82e1278abb02f' },
+  { label: 'Website URL', value: 'https://example.com' },
 ]
 
 export default function SearchBar({ onSearch, loading }) {
@@ -22,7 +22,7 @@ export default function SearchBar({ onSearch, loading }) {
   return (
     <div className="search-section">
       <div className="search-container">
-        <h3>🔍 Indicator Lookup</h3>
+        <h3>🔍 Threat Indicator Search</h3>
         <form onSubmit={handleSubmit}>
           <div className="search-row">
             <div className="search-input-wrap">
@@ -30,7 +30,7 @@ export default function SearchBar({ onSearch, loading }) {
               <input
                 id="indicator-input"
                 type="text"
-                placeholder="Enter IP, domain, URL, or file hash…"
+                placeholder="Enter an IP address, website domain, URL, or file hash…"
                 value={indicator}
                 onChange={(e) => setIndicator(e.target.value)}
                 autoComplete="off"
@@ -43,11 +43,11 @@ export default function SearchBar({ onSearch, loading }) {
               onChange={(e) => setType(e.target.value)}
               id="indicator-type"
             >
-              <option value="auto">Auto-detect</option>
+              <option value="auto">Auto-detect Type</option>
               <option value="ip">IP Address</option>
-              <option value="domain">Domain</option>
-              <option value="url">URL</option>
-              <option value="hash">File Hash</option>
+              <option value="domain">Domain Name</option>
+              <option value="url">Website URL</option>
+              <option value="hash">File Hash (MD5 / SHA256)</option>
             </select>
             <button
               type="submit"
@@ -57,17 +57,20 @@ export default function SearchBar({ onSearch, loading }) {
             >
               {loading ? (
                 <>
-                  <span className="spinner-sm" /> Scanning…
+                  <span className="spinner-sm" /> Scanning Feeds…
                 </>
               ) : (
                 <>
-                  <Search size={16} /> Analyze
+                  <Search size={16} /> Analyze Threat
                 </>
               )}
             </button>
           </div>
         </form>
         <div className="search-hints">
+          <span style={{ fontSize: '.72rem', color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', marginRight: '4px' }}>
+            Quick Examples:
+          </span>
           {EXAMPLES.map((ex) => (
             <span
               key={ex.value}

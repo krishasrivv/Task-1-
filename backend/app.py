@@ -260,6 +260,56 @@ def _normalize_vt(response, indicator_type: str, indicator_value: str) -> dict:
     return result
 
 
+_CYBER_TRANSLATIONS = [
+    # Spanish / Portuguese phrases commonly in threat feeds
+    (re.compile(r"\bataques? de phishing\b", re.I), "phishing attack"),
+    (re.compile(r"\bataques? de fuerza bruta\b", re.I), "brute-force attack"),
+    (re.compile(r"\bactividad(es)? maliciosa(s)?\b", re.I), "malicious activity"),
+    (re.compile(r"\bservidores? de comando y control\b", re.I), "command-and-control (C2) server"),
+    (re.compile(r"\bservidores? c2\b", re.I), "C2 server"),
+    (re.compile(r"\bdominios? maliciosos?\b", re.I), "malicious domain"),
+    (re.compile(r"\bdominios? sospechosos?\b", re.I), "suspicious domain"),
+    (re.compile(r"\bdirecciones? ip maliciosas?\b", re.I), "malicious IP address"),
+    (re.compile(r"\binfecci[oó]n de malware\b", re.I), "malware infection"),
+    (re.compile(r"\btr[aá]fico sospechoso\b", re.I), "suspicious traffic"),
+    (re.compile(r"\bcampa[ñn]a de malware\b", re.I), "malware campaign"),
+    (re.compile(r"\bcampa[ñn]a de ransomware\b", re.I), "ransomware campaign"),
+    (re.compile(r"\bfraude bancario\b", re.I), "banking fraud"),
+    (re.compile(r"\bservidor comprometido\b", re.I), "compromised server"),
+    (re.compile(r"\brobo de credenciales\b", re.I), "credential theft"),
+    (re.compile(r"\bvulnerabilidad explotada\b", re.I), "exploited vulnerability"),
+    (re.compile(r"\bdenegaci[oó]n de servicio\b", re.I), "denial of service (DoS)"),
+    (re.compile(r"\bamenaza detectada\b", re.I), "detected threat"),
+    (re.compile(r"\bcomportamiento an[oó]malo\b", re.I), "anomalous behavior"),
+    (re.compile(r"\bbloqueo de ip\b", re.I), "blocked IP"),
+    (re.compile(r"\blista negra\b", re.I), "blocklist"),
+    (re.compile(r"\bataque dirigido\b", re.I), "targeted attack"),
+    (re.compile(r"\bescaneo de puertos\b", re.I), "port scanning"),
+    (re.compile(r"\bfiltraci[oó]n de datos\b", re.I), "data exfiltration"),
+    (re.compile(r"\bcorreo no deseado\b", re.I), "spam email"),
+    (re.compile(r"\barchivos? infectados?\b", re.I), "infected file"),
+    (re.compile(r"\bmuestra de malware\b", re.I), "malware sample"),
+    (re.compile(r"\bamenazas? persistentes?\b", re.I), "persistent threat"),
+    (re.compile(r"\bespionaje cibern[eé]tico\b", re.I), "cyber espionage"),
+    (re.compile(r"\bsecuestro de datos\b", re.I), "ransomware data hijacking"),
+    (re.compile(r"\bsuplantaci[oó]n de identidad\b", re.I), "identity spoofing / phishing"),
+    (re.compile(r"\bdetectado en\b", re.I), "detected in"),
+    (re.compile(r"\basociado a\b", re.I), "associated with"),
+    (re.compile(r"\brelacionado con\b", re.I), "related to"),
+    (re.compile(r"\butilizado por\b", re.I), "used by"),
+    (re.compile(r"\borigen de\b", re.I), "origin of"),
+    (re.compile(r"\bdestino de\b", re.I), "target of"),
+]
+
+def _normalize_to_english(text: str) -> str:
+    if not text:
+        return ""
+    result = str(text)
+    for pattern, replacement in _CYBER_TRANSLATIONS:
+        result = pattern.sub(replacement, result)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # AlienVault OTX helpers
 # ---------------------------------------------------------------------------
@@ -330,14 +380,14 @@ def _otx_lookup(indicator_type: str, value: str) -> dict:
     pulses_raw = data.get("pulse_info", {}).get("pulses", [])
     result["pulses"] = [
         {
-            "name": p.get("name", ""),
-            "description": (p.get("description", "") or "")[:200],
+            "name": _normalize_to_english(p.get("name", "")),
+            "description": _normalize_to_english(p.get("description", "") or "")[:250],
             "created": p.get("created", ""),
-            "tags": (p.get("tags", []) or [])[:10],
-            "adversary": p.get("adversary", ""),
+            "tags": [_normalize_to_english(t) for t in (p.get("tags", []) or [])[:10]],
+            "adversary": _normalize_to_english(p.get("adversary", "")),
             "targeted_countries": (p.get("targeted_countries", []) or [])[:5],
             "attack_ids": [
-                a.get("display_name", "") for a in (p.get("attack_ids", []) or [])[:5]
+                _normalize_to_english(a.get("display_name", "")) for a in (p.get("attack_ids", []) or [])[:5]
             ],
         }
         for p in pulses_raw[:10]
@@ -365,15 +415,18 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
         return {"error": "NVIDIA API key not configured in backend/.env. Add a key from build.nvidia.com.", "reply": None}
 
     system_prompt = (
-        "You are ThreatIntel AI, an elite cybersecurity threat intelligence analyst assistant.\n\n"
-        "Core Analytical Principles:\n"
-        "1. Base every conclusion strictly on the provided VirusTotal and AlienVault OTX report data. "
-        "Do not invent evidence, whitelist status, reputation scores, HTTP response codes, or vendor classifications if those fields are absent.\n"
-        "2. Clearly distinguish between malicious, suspicious, harmless, and undetected counts.\n"
-        "3. CRITICAL RULE: Never conclude that an indicator or domain is safe or benign based only on harmless or undetected counts. "
-        "Explain that undetected/harmless scans simply mean no security engines currently flag it, but unindexed threats or newly registered domains can still carry risk.\n"
-        "4. If a source returned an error or has missing fields, explicitly acknowledge the missing information rather than making assumptions.\n"
-        "5. Format your analysis using clean Markdown with headings (###), bold text for key indicators/metrics, and bullet points for readability."
+        "You are ThreatIntel AI, an intelligent cybersecurity threat intelligence assistant communicating in simple, clear English.\n\n"
+        "Core Instructions:\n"
+        "1. English Only: Always answer in clear, simple English. If any threat pulses, descriptions, or report fields are in Spanish or other non-English languages, translate and explain them in plain English.\n"
+        "2. Plain Language Explanations: Explain technical cybersecurity terms in simple words whenever they appear:\n"
+        "   - ASN means the Network Owner / Internet Service Provider.\n"
+        "   - File Hash means a unique digital fingerprint of a file (MD5/SHA256).\n"
+        "   - Threat Pulse means a community security alert reported by researchers.\n"
+        "   - Reputation means the community trust score.\n"
+        "3. Clear Verdict: Clearly explain whether the indicator looks Malicious, Suspicious, Harmless, or Unknown based strictly on the live report findings.\n"
+        "4. Evidence Rule: Never claim an indicator or website is safe without sufficient evidence. Explain that 0 detections or harmless votes only mean security engines have not flagged it yet.\n"
+        "5. Accurate Reporting: Never invent whitelist status, vendor ratings, or HTTP response codes that do not exist in the report.\n"
+        "6. Formatting: Use short, readable sentences, clear Markdown headings (###), bold text for key indicators, and bullet points."
     )
 
     messages = [
