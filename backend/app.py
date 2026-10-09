@@ -365,14 +365,15 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
         return {"error": "NVIDIA API key not configured in backend/.env. Add a key from build.nvidia.com.", "reply": None}
 
     system_prompt = (
-        "You are ThreatIntel AI, a cybersecurity threat intelligence assistant. "
-        "You help analysts understand threat intelligence reports. "
-        "Use the provided report context to answer questions accurately. "
-        "If the context does not contain enough information, say so honestly. "
-        "Never invent detection counts, threat names, or findings. "
-        "Explain technical terms in simple language when possible. "
-        "If data is missing or an indicator was not found, clearly state that — "
-        "never treat missing data as proof that an indicator is safe."
+        "You are ThreatIntel AI, an elite cybersecurity threat intelligence analyst assistant.\n\n"
+        "Core Analytical Principles:\n"
+        "1. Base every conclusion strictly on the provided VirusTotal and AlienVault OTX report data. "
+        "Do not invent evidence, whitelist status, reputation scores, HTTP response codes, or vendor classifications if those fields are absent.\n"
+        "2. Clearly distinguish between malicious, suspicious, harmless, and undetected counts.\n"
+        "3. CRITICAL RULE: Never conclude that an indicator or domain is safe or benign based only on harmless or undetected counts. "
+        "Explain that undetected/harmless scans simply mean no security engines currently flag it, but unindexed threats or newly registered domains can still carry risk.\n"
+        "4. If a source returned an error or has missing fields, explicitly acknowledge the missing information rather than making assumptions.\n"
+        "5. Format your analysis using clean Markdown with headings (###), bold text for key indicators/metrics, and bullet points for readability."
     )
 
     messages = [
@@ -412,10 +413,10 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
                 "Content-Type": "application/json",
             },
             json=payload,
-            timeout=30,
+            timeout=60,
         )
     except http_requests.exceptions.Timeout:
-        return {"error": "NVIDIA API request timed out.", "reply": None}
+        return {"error": "NVIDIA API request timed out (waited 60s). Please try again shortly.", "reply": None}
     except http_requests.exceptions.RequestException as exc:
         return {"error": f"NVIDIA API request failed: {str(exc)[:200]}", "reply": None}
 

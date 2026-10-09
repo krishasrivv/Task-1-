@@ -1,13 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Bot, User, AlertCircle } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import { Send, Bot, User, AlertCircle, Sparkles, RefreshCw } from 'lucide-react'
+
+const SUGGESTIONS = [
+  'Summarize threat level',
+  'Explain detection counts',
+  'Are there suspicious indicators?',
+  'What actions should I take?',
+]
 
 export default function Chatbot({ lookupResult }) {
   const [messages, setMessages] = useState([
     {
       role: 'system',
       content: lookupResult
-        ? 'I have the current threat intelligence report loaded. Ask me anything about the results.'
-        : 'Search for an indicator first, then I can help you analyze the results.',
+        ? 'Threat intelligence report loaded. Ask me anything to analyze this indicator.'
+        : 'Search for an indicator (IP, domain, hash, or URL) first, then I can help you analyze the findings.',
     },
   ])
   const [input, setInput] = useState('')
@@ -16,16 +24,19 @@ export default function Chatbot({ lookupResult }) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, loading])
 
   // Update system message when lookupResult changes
   useEffect(() => {
     if (lookupResult) {
       setMessages(prev => {
         const first = prev[0]
-        if (first?.role === 'system' && first.content.includes('Search for an indicator')) {
+        if (first?.role === 'system') {
           return [
-            { role: 'system', content: 'Threat report loaded. Ask me anything about these results!' },
+            {
+              role: 'system',
+              content: `Loaded report for \`${lookupResult.indicator}\` (${lookupResult.type?.toUpperCase() || 'Indicator'}). Ask me anything to analyze this indicator.`,
+            },
             ...prev.slice(1),
           ]
         }
@@ -34,13 +45,13 @@ export default function Chatbot({ lookupResult }) {
     }
   }, [lookupResult])
 
-  const handleSend = async () => {
-    const text = input.trim()
+  const sendQuery = async (queryText) => {
+    const text = (queryText || input).trim()
     if (!text || loading) return
 
     const userMsg = { role: 'user', content: text }
     setMessages(prev => [...prev, userMsg])
-    setInput('')
+    if (!queryText) setInput('')
     setLoading(true)
 
     try {
@@ -52,20 +63,31 @@ export default function Chatbot({ lookupResult }) {
       })
       const data = await res.json()
 
-      if (data.error) {
-        setMessages(prev => [...prev, { role: 'error', content: data.error }])
+      if (!res.ok || data.error) {
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'error',
+            content: data.error || `Service returned HTTP ${res.status}.`,
+          },
+        ])
       } else {
         setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
       }
-    } catch (err) {
+    } catch {
       setMessages(prev => [
         ...prev,
-        { role: 'error', content: 'Failed to reach the AI service. Is the backend running?' },
+        {
+          role: 'error',
+          content: 'Network error — could not reach the backend AI service. Please ensure the Flask server is running.',
+        },
       ])
     } finally {
       setLoading(false)
     }
   }
+
+  const handleSend = () => sendQuery()
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -92,7 +114,7 @@ export default function Chatbot({ lookupResult }) {
                 </div>
               )}
               {msg.role === 'assistant' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '.72rem', opacity: .7 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', fontSize: '.72rem', color: '#60a5fa' }}>
                   <Bot size={12} /> ThreatIntel AI
                 </div>
               )}
@@ -101,7 +123,14 @@ export default function Chatbot({ lookupResult }) {
                   <AlertCircle size={12} /> Error
                 </div>
               )}
-              <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+
+              {msg.role === 'assistant' || msg.role === 'system' ? (
+                <div className="markdown-content">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+              )}
             </div>
           ))}
 
@@ -109,7 +138,7 @@ export default function Chatbot({ lookupResult }) {
             <div className="chat-message assistant">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="spinner-sm" />
-                <span style={{ color: 'var(--text-muted)', fontSize: '.82rem' }}>Analyzing…</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '.82rem' }}>Analyzing threat intelligence report…</span>
               </div>
             </div>
           )}
@@ -117,11 +146,39 @@ export default function Chatbot({ lookupResult }) {
           <div ref={bottomRef} />
         </div>
 
+        {lookupResult && (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', padding: '8px 16px', background: 'var(--bg-card)', borderTop: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '.72rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
+              <Sparkles size={11} /> Quick prompts:
+            </span>
+            {SUGGESTIONS.map((s, idx) => (
+              <button
+                key={idx}
+                onClick={() => sendQuery(s)}
+                disabled={loading}
+                style={{
+                  fontSize: '.72rem',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  opacity: loading ? 0.6 : 1,
+                  transition: 'all .15s',
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="chatbot-input-row">
           <input
             id="chat-input"
             type="text"
-            placeholder={lookupResult ? 'Ask about this threat report…' : 'Search an indicator first…'}
+            placeholder={lookupResult ? `Ask about ${lookupResult.indicator}…` : 'Search an indicator on the dashboard first…'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
