@@ -10,12 +10,14 @@ import hashlib
 import json
 import time
 from urllib.parse import quote as url_quote
+from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 import requests as http_requests
 
-load_dotenv()
+_env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(dotenv_path=_env_path)
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -26,7 +28,7 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 VT_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
 OTX_API_KEY = os.getenv("ALIENVAULT_OTX_API_KEY", "")
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
-NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "meta/llama-3.1-70b-instruct")
+NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 OTX_BASE = "https://otx.alienvault.com/api/v1"
@@ -292,7 +294,7 @@ def _otx_lookup(indicator_type: str, value: str) -> dict:
 def _nvidia_chat(user_message: str, report_context: str) -> dict:
     """Send a chat request to an NVIDIA-hosted model."""
     if not NVIDIA_API_KEY:
-        return {"error": "NVIDIA API key not configured.", "reply": None}
+        return {"error": "NVIDIA API key not configured in backend/.env.", "reply": None}
 
     system_prompt = (
         "You are ThreatIntel AI, a cybersecurity threat intelligence assistant. "
@@ -349,7 +351,9 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
         return {"error": f"NVIDIA API request failed: {str(exc)[:200]}", "reply": None}
 
     if r.status_code == 401 or r.status_code == 403:
-        return {"error": "Invalid or missing NVIDIA API key.", "reply": None}
+        return {"error": "Invalid or missing NVIDIA API key in backend/.env. Ensure you use an API key from build.nvidia.com (starts with 'nvapi-').", "reply": None}
+    if r.status_code == 410:
+        return {"error": f"NVIDIA model '{NVIDIA_MODEL}' is no longer active. Set NVIDIA_MODEL=nvidia/llama-3.1-nemotron-70b-instruct in backend/.env.", "reply": None}
     if r.status_code == 429:
         return {"error": "NVIDIA API rate limit exceeded.", "reply": None}
     if r.status_code != 200:

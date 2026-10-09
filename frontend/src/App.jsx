@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import StatsCards from './components/StatsCards'
@@ -51,7 +51,9 @@ function App() {
   }, [])
 
   // Fetch health on mount
-  useState(() => { fetchHealth() })
+  useEffect(() => {
+    fetchHealth()
+  }, [fetchHealth])
 
   const vtData = lookupResult?.virustotal
   const otxData = lookupResult?.alienvault_otx
