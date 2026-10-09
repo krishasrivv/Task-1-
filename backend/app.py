@@ -22,13 +22,35 @@ load_dotenv(dotenv_path=_env_path)
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-VT_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
-OTX_API_KEY = os.getenv("ALIENVAULT_OTX_API_KEY", "")
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
-NVIDIA_MODEL = os.getenv("NVIDIA_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
+import base64
+
+def _clean_key(val: str) -> str:
+    return val.strip().strip("'\"") if val else ""
+
+def _is_placeholder(val: str) -> bool:
+    if not val:
+        return True
+    low = val.lower()
+    return "your_" in low or "_here" in low or "placeholder" in low
+
+def get_vt_api_key() -> str:
+    # Refresh env from backend/.env if needed
+    k = _clean_key(os.getenv("VIRUSTOTAL_API_KEY") or os.getenv("VT_API_KEY") or "")
+    if _is_placeholder(k):
+        return ""
+    return k
+
+def get_otx_api_key() -> str:
+    k = _clean_key(os.getenv("ALIENVAULT_OTX_API_KEY") or os.getenv("OTX_API_KEY") or "")
+    if _is_placeholder(k):
+        return ""
+    return k
+
+def get_nvidia_api_key() -> str:
+    k = _clean_key(os.getenv("NVIDIA_API_KEY") or "")
+    if _is_placeholder(k):
+        return ""
+    return k
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 OTX_BASE = "https://otx.alienvault.com/api/v1"
@@ -73,49 +95,69 @@ def sanitize(value: str) -> str:
 # VirusTotal helpers
 # ---------------------------------------------------------------------------
 def _vt_headers():
-    return {"x-apikey": VT_API_KEY, "Accept": "application/json"}
+    return {"x-apikey": get_vt_api_key(), "Accept": "application/json"}
 
 
 def _vt_lookup_ip(ip: str) -> dict:
-    r = http_requests.get(
-        f"{VT_BASE}/ip_addresses/{ip}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
-    )
-    return _normalize_vt(r, "ip", ip)
+    try:
+        r = http_requests.get(
+            f"{VT_BASE}/ip_addresses/{ip}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
+        )
+        return _normalize_vt(r, "ip", ip)
+    except http_requests.exceptions.Timeout:
+        return {"source": "virustotal", "indicator_type": "ip", "indicator": ip, "found": False, "error": "VirusTotal request timed out."}
+    except http_requests.exceptions.RequestException as exc:
+        return {"source": "virustotal", "indicator_type": "ip", "indicator": ip, "found": False, "error": f"VirusTotal connection error: {str(exc)[:100]}"}
 
 
 def _vt_lookup_domain(domain: str) -> dict:
-    r = http_requests.get(
-        f"{VT_BASE}/domains/{domain}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
-    )
-    return _normalize_vt(r, "domain", domain)
+    try:
+        r = http_requests.get(
+            f"{VT_BASE}/domains/{domain}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
+        )
+        return _normalize_vt(r, "domain", domain)
+    except http_requests.exceptions.Timeout:
+        return {"source": "virustotal", "indicator_type": "domain", "indicator": domain, "found": False, "error": "VirusTotal request timed out."}
+    except http_requests.exceptions.RequestException as exc:
+        return {"source": "virustotal", "indicator_type": "domain", "indicator": domain, "found": False, "error": f"VirusTotal connection error: {str(exc)[:100]}"}
 
 
 def _vt_lookup_url(url: str) -> dict:
-    url_id = hashlib.sha256(url.encode()).hexdigest()
-    # First try direct lookup; if 404, submit then retry
-    r = http_requests.get(
-        f"{VT_BASE}/urls/{url_id}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
-    )
-    if r.status_code == 404:
-        # Submit URL for analysis
-        http_requests.post(
-            f"{VT_BASE}/urls",
-            headers=_vt_headers(),
-            data={"url": url},
-            timeout=REQUEST_TIMEOUT,
-        )
-        time.sleep(2)
+    try:
+        # VirusTotal v3 URL ID is base64url-encoded URL without padding '='
+        url_id = base64.urlsafe_b64encode(url.encode()).decode().strip("=")
         r = http_requests.get(
             f"{VT_BASE}/urls/{url_id}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
         )
-    return _normalize_vt(r, "url", url)
+        if r.status_code == 404:
+            # Submit URL for analysis if not previously analyzed
+            http_requests.post(
+                f"{VT_BASE}/urls",
+                headers=_vt_headers(),
+                data={"url": url},
+                timeout=REQUEST_TIMEOUT,
+            )
+            time.sleep(1.5)
+            r = http_requests.get(
+                f"{VT_BASE}/urls/{url_id}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
+            )
+        return _normalize_vt(r, "url", url)
+    except http_requests.exceptions.Timeout:
+        return {"source": "virustotal", "indicator_type": "url", "indicator": url, "found": False, "error": "VirusTotal request timed out."}
+    except http_requests.exceptions.RequestException as exc:
+        return {"source": "virustotal", "indicator_type": "url", "indicator": url, "found": False, "error": f"VirusTotal connection error: {str(exc)[:100]}"}
 
 
 def _vt_lookup_hash(file_hash: str) -> dict:
-    r = http_requests.get(
-        f"{VT_BASE}/files/{file_hash}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
-    )
-    return _normalize_vt(r, "hash", file_hash)
+    try:
+        r = http_requests.get(
+            f"{VT_BASE}/files/{file_hash}", headers=_vt_headers(), timeout=REQUEST_TIMEOUT
+        )
+        return _normalize_vt(r, "hash", file_hash)
+    except http_requests.exceptions.Timeout:
+        return {"source": "virustotal", "indicator_type": "hash", "indicator": file_hash, "found": False, "error": "VirusTotal request timed out."}
+    except http_requests.exceptions.RequestException as exc:
+        return {"source": "virustotal", "indicator_type": "hash", "indicator": file_hash, "found": False, "error": f"VirusTotal connection error: {str(exc)[:100]}"}
 
 
 def _normalize_vt(response, indicator_type: str, indicator_value: str) -> dict:
@@ -129,11 +171,11 @@ def _normalize_vt(response, indicator_type: str, indicator_value: str) -> dict:
         "raw_status": response.status_code,
     }
 
-    if response.status_code == 401:
-        result["error"] = "Invalid or missing VirusTotal API key."
+    if response.status_code in (401, 403):
+        result["error"] = "Invalid or missing VirusTotal API key. Check your key in backend/.env."
         return result
     if response.status_code == 429:
-        result["error"] = "VirusTotal rate limit exceeded. Try again later."
+        result["error"] = "VirusTotal rate limit exceeded (Free tier: 4 requests/min, 500/day). Try again shortly."
         return result
     if response.status_code == 404:
         result["error"] = "No VirusTotal report found for this indicator."
@@ -201,7 +243,7 @@ def _normalize_vt(response, indicator_type: str, indicator_value: str) -> dict:
 # AlienVault OTX helpers
 # ---------------------------------------------------------------------------
 def _otx_headers():
-    return {"X-OTX-API-KEY": OTX_API_KEY, "Accept": "application/json"}
+    return {"X-OTX-API-KEY": get_otx_api_key(), "Accept": "application/json"}
 
 
 def _otx_lookup(indicator_type: str, value: str) -> dict:
@@ -293,7 +335,8 @@ def _otx_lookup(indicator_type: str, value: str) -> dict:
 # ---------------------------------------------------------------------------
 def _nvidia_chat(user_message: str, report_context: str) -> dict:
     """Send a chat request to an NVIDIA-hosted model."""
-    if not NVIDIA_API_KEY:
+    nvidia_key = get_nvidia_api_key()
+    if not nvidia_key:
         return {"error": "NVIDIA API key not configured in backend/.env.", "reply": None}
 
     system_prompt = (
@@ -328,7 +371,7 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
     messages.append({"role": "user", "content": user_message})
 
     payload = {
-        "model": NVIDIA_MODEL,
+        "model": os.getenv("NVIDIA_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct"),
         "messages": messages,
         "temperature": 0.3,
         "max_tokens": 1024,
@@ -339,7 +382,7 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
         r = http_requests.post(
             NVIDIA_BASE,
             headers={
-                "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Authorization": f"Bearer {nvidia_key}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -353,7 +396,7 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
     if r.status_code == 401 or r.status_code == 403:
         return {"error": "Invalid or missing NVIDIA API key in backend/.env. Ensure you use an API key from build.nvidia.com (starts with 'nvapi-').", "reply": None}
     if r.status_code == 410:
-        return {"error": f"NVIDIA model '{NVIDIA_MODEL}' is no longer active. Set NVIDIA_MODEL=nvidia/llama-3.1-nemotron-70b-instruct in backend/.env.", "reply": None}
+        return {"error": f"NVIDIA model '{payload['model']}' is no longer active. Set NVIDIA_MODEL=nvidia/llama-3.1-nemotron-70b-instruct in backend/.env.", "reply": None}
     if r.status_code == 429:
         return {"error": "NVIDIA API rate limit exceeded.", "reply": None}
     if r.status_code != 200:
@@ -380,9 +423,9 @@ def health():
             "status": "ok",
             "service": "ThreatIntel AI Backend",
             "sources": {
-                "virustotal": "configured" if VT_API_KEY else "not configured",
-                "alienvault_otx": "configured" if OTX_API_KEY else "not configured",
-                "nvidia_ai": "configured" if NVIDIA_API_KEY else "not configured",
+                "virustotal": "configured" if get_vt_api_key() else "not configured",
+                "alienvault_otx": "configured" if get_otx_api_key() else "not configured",
+                "nvidia_ai": "configured" if get_nvidia_api_key() else "not configured",
             },
         }
     )
@@ -412,7 +455,7 @@ def lookup():
 
     # --- VirusTotal ---
     vt_result = None
-    if VT_API_KEY:
+    if get_vt_api_key():
         try:
             dispatch = {
                 "ip": _vt_lookup_ip,
@@ -437,12 +480,12 @@ def lookup():
         vt_result = {
             "source": "virustotal",
             "found": False,
-            "error": "VirusTotal API key not configured.",
+            "error": "VirusTotal API key not configured in backend/.env. Please add your API key from virustotal.com.",
         }
 
     # --- AlienVault OTX ---
     otx_result = None
-    if OTX_API_KEY:
+    if get_otx_api_key():
         try:
             otx_result = _otx_lookup(ind_type, indicator)
         except Exception as exc:
@@ -455,7 +498,7 @@ def lookup():
         otx_result = {
             "source": "alienvault_otx",
             "found": False,
-            "error": "AlienVault OTX API key not configured.",
+            "error": "AlienVault OTX API key not configured in backend/.env.",
         }
 
     return jsonify(
