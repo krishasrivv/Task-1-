@@ -16,8 +16,17 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import requests as http_requests
 
-_env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=_env_path)
+# Ensure backend/.env or workspace .env is reliably loaded
+_backend_dir = Path(__file__).resolve().parent
+_backend_env = _backend_dir / ".env"
+_root_env = _backend_dir.parent / ".env"
+
+if _backend_env.exists():
+    load_dotenv(dotenv_path=_backend_env, override=True)
+elif _root_env.exists():
+    load_dotenv(dotenv_path=_root_env, override=True)
+else:
+    load_dotenv(override=True)
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -30,27 +39,17 @@ def _clean_key(val: str) -> str:
 def _is_placeholder(val: str) -> bool:
     if not val:
         return True
-    low = val.lower()
-    return "your_" in low or "_here" in low or "placeholder" in low
+    low = val.lower().strip()
+    return low.startswith("your_") or low.endswith("_here") or "your_virustotal_api_key_here" in low or "your_alienvault_otx_api_key_here" in low or "your_nvidia_api_key_here" in low
 
 def get_vt_api_key() -> str:
-    # Refresh env from backend/.env if needed
-    k = _clean_key(os.getenv("VIRUSTOTAL_API_KEY") or os.getenv("VT_API_KEY") or "")
-    if _is_placeholder(k):
-        return ""
-    return k
+    return _clean_key(os.getenv("VIRUSTOTAL_API_KEY") or os.getenv("VT_API_KEY") or "")
 
 def get_otx_api_key() -> str:
-    k = _clean_key(os.getenv("ALIENVAULT_OTX_API_KEY") or os.getenv("OTX_API_KEY") or "")
-    if _is_placeholder(k):
-        return ""
-    return k
+    return _clean_key(os.getenv("ALIENVAULT_OTX_API_KEY") or os.getenv("OTX_API_KEY") or "")
 
 def get_nvidia_api_key() -> str:
-    k = _clean_key(os.getenv("NVIDIA_API_KEY") or "")
-    if _is_placeholder(k):
-        return ""
-    return k
+    return _clean_key(os.getenv("NVIDIA_API_KEY") or "")
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 OTX_BASE = "https://otx.alienvault.com/api/v1"
@@ -243,7 +242,11 @@ def _normalize_vt(response, indicator_type: str, indicator_value: str) -> dict:
 # AlienVault OTX helpers
 # ---------------------------------------------------------------------------
 def _otx_headers():
-    return {"X-OTX-API-KEY": get_otx_api_key(), "Accept": "application/json"}
+    headers = {"Accept": "application/json"}
+    k = get_otx_api_key()
+    if k and not _is_placeholder(k):
+        headers["X-OTX-API-KEY"] = k
+    return headers
 
 
 def _otx_lookup(indicator_type: str, value: str) -> dict:
@@ -336,8 +339,8 @@ def _otx_lookup(indicator_type: str, value: str) -> dict:
 def _nvidia_chat(user_message: str, report_context: str) -> dict:
     """Send a chat request to an NVIDIA-hosted model."""
     nvidia_key = get_nvidia_api_key()
-    if not nvidia_key:
-        return {"error": "NVIDIA API key not configured in backend/.env.", "reply": None}
+    if not nvidia_key or _is_placeholder(nvidia_key):
+        return {"error": "NVIDIA API key not configured in backend/.env. Add a key from build.nvidia.com.", "reply": None}
 
     system_prompt = (
         "You are ThreatIntel AI, a cybersecurity threat intelligence assistant. "
@@ -418,14 +421,23 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
 # ---------------------------------------------------------------------------
 @app.route("/api/health", methods=["GET"])
 def health():
+    vt_key = get_vt_api_key()
+    otx_key = get_otx_api_key()
+    nv_key = get_nvidia_api_key()
+
     return jsonify(
         {
             "status": "ok",
             "service": "ThreatIntel AI Backend",
             "sources": {
-                "virustotal": "configured" if get_vt_api_key() else "not configured",
-                "alienvault_otx": "configured" if get_otx_api_key() else "not configured",
-                "nvidia_ai": "configured" if get_nvidia_api_key() else "not configured",
+                "virustotal": "configured" if (vt_key and not _is_placeholder(vt_key)) else "not configured",
+                "alienvault_otx": "configured" if (otx_key and not _is_placeholder(otx_key)) else "not configured",
+                "nvidia_ai": "configured" if (nv_key and not _is_placeholder(nv_key)) else "not configured",
+            },
+            "keys_present": {
+                "virustotal": bool(vt_key),
+                "alienvault_otx": bool(otx_key),
+                "nvidia_ai": bool(nv_key),
             },
         }
     )
@@ -455,7 +467,8 @@ def lookup():
 
     # --- VirusTotal ---
     vt_result = None
-    if get_vt_api_key():
+    vt_k = get_vt_api_key()
+    if vt_k and not _is_placeholder(vt_k):
         try:
             dispatch = {
                 "ip": _vt_lookup_ip,
@@ -480,25 +493,18 @@ def lookup():
         vt_result = {
             "source": "virustotal",
             "found": False,
-            "error": "VirusTotal API key not configured in backend/.env. Please add your API key from virustotal.com.",
+            "error": "VirusTotal API key not configured in backend/.env. Please replace the placeholder with your 64-character API key from virustotal.com.",
         }
 
     # --- AlienVault OTX ---
     otx_result = None
-    if get_otx_api_key():
-        try:
-            otx_result = _otx_lookup(ind_type, indicator)
-        except Exception as exc:
-            otx_result = {
-                "source": "alienvault_otx",
-                "found": False,
-                "error": f"AlienVault OTX error: {str(exc)[:200]}",
-            }
-    else:
+    try:
+        otx_result = _otx_lookup(ind_type, indicator)
+    except Exception as exc:
         otx_result = {
             "source": "alienvault_otx",
             "found": False,
-            "error": "AlienVault OTX API key not configured in backend/.env.",
+            "error": f"AlienVault OTX error: {str(exc)[:200]}",
         }
 
     return jsonify(
