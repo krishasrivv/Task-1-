@@ -36,6 +36,21 @@ import base64
 def _clean_key(val: str) -> str:
     return val.strip().strip("'\"") if val else ""
 
+def _read_env_file() -> dict:
+    env_dict = {}
+    target = _backend_env if _backend_env.exists() else _root_env
+    if target.exists():
+        try:
+            with open(target, "r", encoding="utf-8", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        env_dict[k.strip()] = v.strip().strip("'\"")
+        except Exception:
+            pass
+    return env_dict
+
 def _is_placeholder(val: str) -> bool:
     if not val:
         return True
@@ -43,13 +58,20 @@ def _is_placeholder(val: str) -> bool:
     return low.startswith("your_") or low.endswith("_here") or "your_virustotal_api_key_here" in low or "your_alienvault_otx_api_key_here" in low or "your_nvidia_api_key_here" in low
 
 def get_vt_api_key() -> str:
-    return _clean_key(os.getenv("VIRUSTOTAL_API_KEY") or os.getenv("VT_API_KEY") or "")
+    live = _read_env_file()
+    return _clean_key(live.get("VIRUSTOTAL_API_KEY") or live.get("VT_API_KEY") or os.getenv("VIRUSTOTAL_API_KEY") or os.getenv("VT_API_KEY") or "")
 
 def get_otx_api_key() -> str:
-    return _clean_key(os.getenv("ALIENVAULT_OTX_API_KEY") or os.getenv("OTX_API_KEY") or "")
+    live = _read_env_file()
+    return _clean_key(live.get("ALIENVAULT_OTX_API_KEY") or live.get("OTX_API_KEY") or os.getenv("ALIENVAULT_OTX_API_KEY") or os.getenv("OTX_API_KEY") or "")
 
 def get_nvidia_api_key() -> str:
-    return _clean_key(os.getenv("NVIDIA_API_KEY") or "")
+    live = _read_env_file()
+    return _clean_key(live.get("NVIDIA_API_KEY") or os.getenv("NVIDIA_API_KEY") or "")
+
+def get_nvidia_model() -> str:
+    live = _read_env_file()
+    return _clean_key(live.get("NVIDIA_MODEL") or os.getenv("NVIDIA_MODEL") or "meta/llama-3.2-11b-vision-instruct")
 
 VT_BASE = "https://www.virustotal.com/api/v3"
 OTX_BASE = "https://otx.alienvault.com/api/v1"
@@ -373,8 +395,9 @@ def _nvidia_chat(user_message: str, report_context: str) -> dict:
 
     messages.append({"role": "user", "content": user_message})
 
+    model_name = get_nvidia_model()
     payload = {
-        "model": os.getenv("NVIDIA_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct"),
+        "model": model_name,
         "messages": messages,
         "temperature": 0.3,
         "max_tokens": 1024,
