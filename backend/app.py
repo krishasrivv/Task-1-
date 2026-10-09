@@ -261,7 +261,7 @@ def _normalize_vt(response, indicator_type: str, indicator_value: str) -> dict:
 
 
 _CYBER_TRANSLATIONS = [
-    # Spanish / Portuguese phrases commonly in threat feeds
+    # Spanish / Portuguese / foreign phrases commonly in threat feeds
     (re.compile(r"\bataques? de phishing\b", re.I), "phishing attack"),
     (re.compile(r"\bataques? de fuerza bruta\b", re.I), "brute-force attack"),
     (re.compile(r"\bactividad(es)? maliciosa(s)?\b", re.I), "malicious activity"),
@@ -301,6 +301,21 @@ _CYBER_TRANSLATIONS = [
     (re.compile(r"\bdestino de\b", re.I), "target of"),
 ]
 
+_TRANSLATION_CACHE: dict = {}
+
+def _is_technical_identifier(text: str) -> bool:
+    """Check if string is a raw technical identifier (IP, hash, MITRE ID, CVE) that should not be translated."""
+    t = str(text).strip()
+    if _IPV4_RE.match(t):
+        return True
+    if _HASH_RE.match(t):
+        return True
+    if re.match(r"^T\d{4}(?:\.\d{3})?$", t, re.I):
+        return True
+    if re.match(r"^CVE-\d{4}-\d{4,}$", t, re.I):
+        return True
+    return False
+
 def _normalize_to_english(text: str) -> str:
     if not text:
         return ""
@@ -308,6 +323,49 @@ def _normalize_to_english(text: str) -> str:
     for pattern, replacement in _CYBER_TRANSLATIONS:
         result = pattern.sub(replacement, result)
     return result
+
+def translate_to_english(text: str, fallback: str = "English translation is unavailable.") -> str:
+    """Translate non-English text to simple English using translation API with offline cyber fallback."""
+    if not text or not str(text).strip():
+        return ""
+    cleaned = str(text).strip()
+    if _is_technical_identifier(cleaned):
+        return cleaned
+
+    if cleaned in _TRANSLATION_CACHE:
+        return _TRANSLATION_CACHE[cleaned]
+
+    # Try live translation service
+    try:
+        q = url_quote(cleaned)
+        url = f"https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q={q}"
+        r = http_requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=4)
+        if r.status_code == 200:
+            data = r.json()
+            translated = "".join([s[0] for s in data[0] if s and s[0]])
+            if translated:
+                translated = _normalize_to_english(translated)
+                _TRANSLATION_CACHE[cleaned] = translated
+                return translated
+    except Exception:
+        pass
+
+    # Offline regex normalization fallback
+    try:
+        norm = _normalize_to_english(cleaned)
+        if norm != cleaned:
+            _TRANSLATION_CACHE[cleaned] = norm
+            return norm
+    except Exception:
+        pass
+
+    # Check if text contains non-ascii or obvious foreign words
+    try:
+        cleaned.encode("ascii")
+        # Is pure ASCII
+        return cleaned
+    except UnicodeEncodeError:
+        return fallback
 
 
 # ---------------------------------------------------------------------------
@@ -380,14 +438,26 @@ def _otx_lookup(indicator_type: str, value: str) -> dict:
     pulses_raw = data.get("pulse_info", {}).get("pulses", [])
     result["pulses"] = [
         {
-            "name": _normalize_to_english(p.get("name", "")),
-            "description": _normalize_to_english(p.get("description", "") or "")[:250],
+            "name": translate_to_english(p.get("name", ""), fallback="Security Alert"),
+            "original_name": p.get("name", ""),
+            "description": translate_to_english(
+                p.get("description", "") or "",
+                fallback="English translation is unavailable."
+            )[:300],
+            "original_description": p.get("description", ""),
             "created": p.get("created", ""),
-            "tags": [_normalize_to_english(t) for t in (p.get("tags", []) or [])[:10]],
-            "adversary": _normalize_to_english(p.get("adversary", "")),
+            "tags": [
+                translate_to_english(t, fallback=t)
+                for t in (p.get("tags", []) or [])[:10]
+            ],
+            "adversary": translate_to_english(p.get("adversary", ""), fallback=p.get("adversary", "")),
             "targeted_countries": (p.get("targeted_countries", []) or [])[:5],
             "attack_ids": [
-                _normalize_to_english(a.get("display_name", "")) for a in (p.get("attack_ids", []) or [])[:5]
+                translate_to_english(
+                    a.get("display_name", "") or a.get("name", ""),
+                    fallback=a.get("name", "")
+                )
+                for a in (p.get("attack_ids", []) or [])[:5]
             ],
         }
         for p in pulses_raw[:10]
