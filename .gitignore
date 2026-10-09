@@ -31,3 +31,7 @@ desktop.ini
 # Logs
 *.log
 npm-debug.log*
+
+# Other
+Task1/
+scratch/
